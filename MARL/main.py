@@ -18,8 +18,8 @@ class SimpleFootball:
         self.fig.canvas.draw()
 
     def reset(self):
-        self.pos_A = (0, 0)
-        self.pos_B = (3, 4)
+        self.pos_A = (1, 3)
+        self.pos_B = (2, 1)
         self.possession = random.choice(['A', 'B'])
         return self._encode_state()
 
@@ -67,12 +67,12 @@ class SimpleFootball:
             # check goal crossing: only if holding ball, moving beyond left/right, and in centre rows (1 or 2)
             if holder == self.possession and dst_row in [1, 2]:
 
-                if player == 'A' and dst_col >= self.COLS:
+                if player == 'B' and dst_col >= self.COLS:
                     # A scores
                     self.reset()
                     return self._encode_state(), +1, -1, True
                 
-                if player == 'B' and dst_col < 0:
+                if player == 'A' and dst_col < 0:
                     # B scores
                     self.reset()
                     return self._encode_state(), -1, +1, True
@@ -161,12 +161,17 @@ class BeliefLearner:
         return {a: counts[a] / total for a in counts}
 
     def select_action(self, s):
+
+        if self.steps < int(1e5):
+            return random.randrange(len(SimpleFootball.ACTIONS))
+        
         # ε-greedy with behavioural best-response
         if random.random() < self.epsilon:
             return random.randrange(len(SimpleFootball.ACTIONS))
+        
         belief = self.get_belief(s)
-       # if belief == {}:
-            #belief = {a: 1.0 / len(SimpleFootball.ACTIONS) for a in range(len(SimpleFootball.ACTIONS))}
+        if belief == {}:
+            belief = {a: 1.0 / len(SimpleFootball.ACTIONS) for a in range(len(SimpleFootball.ACTIONS))}
         #print(f"Agent {self.name} belief: {belief}")
         # compute expected Q for each of our actions
         evs = np.zeros(len(SimpleFootball.ACTIONS))
@@ -191,8 +196,7 @@ class BeliefLearner:
         )
 
         # Q-update on joint action (a_A, a_B)
-        self.Q[s, a_A, a_B] = (1 - self.alpha) * self.Q[s, a_A, a_B] + \
-                              self.alpha * (r + self.gamma * V_next)
+        self.Q[s, a_A, a_B] = (1 - self.alpha) * self.Q[s, a_A, a_B] + self.alpha * (r + self.gamma * V_next)
 
         # belief count update (observed opponent action)
         self.N[s][opp_a] += 1
@@ -203,6 +207,7 @@ class BeliefLearner:
 
 # --- 3. Training and Evaluation ---
 def train(agent, opponent_policy, steps=int(1e6)):
+    games_completed = 0
     env = SimpleFootball()
     s = env.reset()
     for _ in range(steps):
@@ -217,7 +222,12 @@ def train(agent, opponent_policy, steps=int(1e6)):
             s2, rA, rB, done = env.step(a_o, a_i)
             reward = rB
             agent.update(s, a_o, a_i, reward, s2)
-        s = env.reset() if done else s2
+        if done:
+            games_completed += 1
+            s = env.reset()
+        else:
+            s = s2
+    print(f"Agent {agent.name} completed {games_completed} games")
     return agent
 
 
@@ -233,6 +243,7 @@ def evaluate(agent_A, agent_B, steps=int(1e5), gamma=0.9):
         a_A = agent_A.select_action(s)
         a_B = agent_B.select_action(s)
         s2, rA, rB, done = env.step(a_A, a_B)
+        env.render(pause=0.5, wait_for_input=False)
         if done:
             games += 1
             if rA > 0:
@@ -243,40 +254,104 @@ def evaluate(agent_A, agent_B, steps=int(1e5), gamma=0.9):
     win_pct_A = (wins_A / games * 100) if games > 0 else 0
     return games, win_pct_A
 
-if __name__ == '__main__':
-    # 1) A vs random
-    # rand_policy = lambda s: random.randrange(len(SimpleFootball.ACTIONS))
-    # agent_A = BeliefLearner('A')
-    # agent_A = train(agent_A, rand_policy)
-    # games, winpct = evaluate(agent_A, BeliefLearner('B'))
-    # print(f"Agent A vs random: games={games}, win%={winpct:.2f}")
 
-    # # 2) B vs random
-    # agent_B = BeliefLearner('B')
-    # agent_B = train(agent_B, rand_policy)
-    # games, losepct = evaluate(BeliefLearner('A'), agent_B)
-    # print(f"Agent B vs random: games={games}, B win%={losepct:.2f}")
 
-    # 3) A vs B (identical learners)
-    actions = SimpleFootball.ACTIONS
-    agent1 = BeliefLearner('A')
-    agent2 = BeliefLearner('B')
+import seaborn as sns
+
+def train_and_visualize_visits_and_qvalues(agent1, agent2, steps=int(1e6)):
+
     env = SimpleFootball()
     s = env.reset()
-    for _ in range(int(1e6)):
+    games_completed = 0
+
+    visits = np.zeros_like(agent1.Q, dtype=int)
+
+    for _ in range(steps):
         a1 = agent1.select_action(s)
         a2 = agent2.select_action(s)
-        print(f"Agent A position: {env.pos_A}, Agent B position: {env.pos_B}")
-        print(f"Agent A action: {actions[a1]}, Agent B action: {actions[a2]}")
-        env.render(pause=0.1, wait_for_input=True)        
+
         s2, rA, rB, done = env.step(a1, a2)
+
+        # Update agents
         agent1.update(s, a1, a2, rA, s2)
         agent2.update(s, a1, a2, rB, s2)
-        print(f"Agent A belief: {agent1.get_belief(s)}")
-        print(f"Agent B belief: {agent2.get_belief(s)}")
+
+        # Track visits
+        visits[s, a1, a2] += 1
+
         if done:
-            print("Game Over")
-        s = env.reset() if done else s2
-    games, winpct = evaluate(agent1, agent2)
-    print(f"Agent1 vs Agent2: games={games}, A win%={winpct:.2f}")
+            games_completed += 1
+            s = env.reset()
+        else:
+            s = s2
+
+    print(f"Training completed: {games_completed} games")
+
+    # === Visualizations ===
+    plt.ioff()
+
+    # 1. Total state visit frequency (aggregated over joint actions)
+    state_visits = visits.sum(axis=(1, 2))
+    plt.figure(figsize=(10, 4))
+    plt.plot(state_visits)
+    plt.title("State Visit Frequency")
+    plt.xlabel("State Index")
+    plt.ylabel("Visit Count")
+    plt.tight_layout()
+    plt.show()
+
+
+    # 2. Heatmap of joint action frequencies for a few interesting states
+    interesting_states = np.argsort(state_visits)[-3:]  # top 3 visited states
+    for s_id in interesting_states:
+        heat = visits[s_id]
+        print(f"State {env._decode_state(s_id)}")
+        plt.figure(figsize=(6, 5))
+        sns.heatmap(heat, annot=True, fmt="d", xticklabels=SimpleFootball.ACTIONS, yticklabels=SimpleFootball.ACTIONS)
+        plt.title(f"Joint Action Visits for State {s_id}")
+        plt.xlabel("Opponent Action")
+        plt.ylabel("Agent Action")
+        plt.tight_layout()
+        plt.show()
+
+    non_interesting_states = np.argsort(state_visits)[:3]  # top 3 visited states
+    for s_id in non_interesting_states:
+        heat = visits[s_id]
+        print(f"State {env._decode_state(s_id)}")
+        plt.figure(figsize=(6, 5))
+        sns.heatmap(heat, annot=True, fmt="d", xticklabels=SimpleFootball.ACTIONS, yticklabels=SimpleFootball.ACTIONS)
+        plt.title(f"Joint Action Visits for State {s_id}")
+        plt.xlabel("Opponent Action")
+        plt.ylabel("Agent Action")
+        plt.tight_layout()
+        plt.show()
+
+    sorted_visits = np.argsort(state_visits)
+    s_visits = np.sort(state_visits)
+    for i in range(50):
+        print(f"State {i}: {env._decode_state(sorted_visits[i])}, total visits = {s_visits[i]}")
+
+    q_keep = agent1.Q.flatten()[agent1.Q.flatten() > 1e-6]
+
+    # 3. Histogram of Q-values
+    q_values = q_keep
+    q_values = q_values[np.abs(q_values) > 1e-6]  # filter out unvisited
+    plt.figure(figsize=(8, 4))
+    plt.hist(q_values, bins=100, color='steelblue')
+    plt.title("Histogram of Learned Q-values (Agent A)")
+    plt.xlabel("Q-value")
+    plt.ylabel("Count")
+    plt.tight_layout()
+    plt.show()
+
+    return visits, agent1.Q
+
+
+
+
+if __name__ == '__main__':
+
+    agent1 = BeliefLearner('A')
+    agent2 = BeliefLearner('B')
+    visits, q_table = train_and_visualize_visits_and_qvalues(agent1, agent2)
 
