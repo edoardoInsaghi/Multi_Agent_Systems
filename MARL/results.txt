@@ -1,0 +1,22 @@
+======================================================================================================================
+Training Belief Based Learner against Random, 68058 games completed in 1000000 steps.
+Agent A win percentage against Random: 98.30% over 71985 non early terminated games.
+Average length of non early terminated games: 7.22 steps.
+======================================================================================================================
+
+
+======================================================================================================================
+Training Belief Based Learner against other Belief Learner, 71870 games completed in 1000000 steps.
+Agent A win percentage against other Belief Learner: 50.77% over 70930 non early terminated games.
+Average length of non early terminated games: 7.96 steps.
+Agent A win percentage against Random: 99.00% over 73845 non early terminated games.
+Average length of non early terminated games: 6.27 steps.
+======================================================================================================================
+
+
+======================================================================================================================
+Training Belief Based Learner against Random, 72828 games completed in 1000000 steps.
+Training Belief Based Learner against other Belief Learner, 72896 games completed in 1000000 steps.
+Agent A trained against random win percentage against other Belief Learner: 24.35% over 121165 non early terminated games.
+Average length of non early terminated games: 5.44 steps.
+======================================================================================================================
