@@ -3,6 +3,7 @@ import random
 import matplotlib.pyplot as plt
 from matplotlib import patches
 import seaborn as sns
+import pandas as pd
 
 
 class SimpleFootball:
@@ -101,7 +102,7 @@ class SimpleFootball:
         return self._encode_state(), 0, 0, False   
 
 
-    def render(self, pause=0.5, wait_for_input=False):
+    def render2(self, pause=0.5, wait_for_input=False):
         self.ax.clear()
         self.ax.set_xlim(-2, self.COLS + 2)
         self.ax.set_ylim(-1, self.ROWS + 1)
@@ -141,6 +142,52 @@ class SimpleFootball:
 
         if wait_for_input:
             input("Press Enter for next move...")
+
+    def render(self, pause=0.5, wait_for_input=False, score_a=None, score_b=None):
+        self.ax.clear()
+        self.ax.set_xlim(-2, self.COLS + 2)
+        self.ax.set_ylim(-1, self.ROWS + 1)
+        self.ax.set_xticks([])
+        self.ax.set_yticks([])
+        self.ax.set_aspect('equal')
+        self.ax.invert_yaxis()
+
+        for row in range(-1, self.ROWS + 1):
+            for col in range(-2, self.COLS + 2):
+                if (row < 0 or row >= self.ROWS) or (col < 0 or col >= self.COLS):
+                    self.ax.add_patch(patches.Rectangle((col, row), 1, 1, facecolor='black'))
+
+        for row in range(self.ROWS):
+            for col in range(-1, self.COLS + 1):
+                if col < 0 or col >= self.COLS:
+                    if row in [1, 2]:
+                        self.ax.add_patch(patches.Rectangle((col, row), 1, 1, color='lightgreen', alpha=0.5, ec='black'))
+
+        for row in range(self.ROWS):
+            for col in range(self.COLS):
+                self.ax.add_patch(patches.Rectangle((col, row), 1, 1, edgecolor='black', facecolor='white'))
+                if (row, col) == self.pos_A:
+                    circle = patches.Circle((col + 0.5, row + 0.5), 0.3, color='blue')
+                    self.ax.add_patch(circle)
+                    label = 'A*' if self.possession == 'A' else 'A'
+                    self.ax.text(col + 0.5, row + 0.5, label, ha='center', va='center', fontsize=12, color='white')
+                elif (row, col) == self.pos_B:
+                    circle = patches.Circle((col + 0.5, row + 0.5), 0.3, color='red')
+                    self.ax.add_patch(circle)
+                    label = 'B*' if self.possession == 'B' else 'B'
+                    self.ax.text(col + 0.5, row + 0.5, label, ha='center', va='center', fontsize=12, color='white')
+
+        # Display score if provided
+        if score_a is not None and score_b is not None:
+            self.ax.text(self.COLS / 2, -1.2, f"Score A: {score_a}   |   Score B: {score_b}",
+                        ha='center', va='center', fontsize=12, fontweight='bold')
+
+        self.fig.canvas.draw()
+        plt.pause(pause)
+
+        if wait_for_input:
+            input("Press Enter for next move...")
+
 
 
 def random_policy(s):
@@ -288,11 +335,14 @@ def train_and_eval_against_random(steps=int(1e6),
     # Q-values histogram
     q_values = agent.Q.flatten()
     q_values = q_values[np.abs(q_values) > 1e-5]
-    plt.figure(figsize=(8, 4))
-    plt.hist(q_values, bins=100, color='steelblue', density=True)
-    plt.title("Histogram of Learned Q-values against Random Opponent")
-    plt.xlabel("Q-value")
-    plt.ylabel("Density")
+
+    plt.figure(figsize=(10, 5))
+    sns.histplot(q_values, bins=100, color='steelblue', stat='density', kde=False, edgecolor='black', alpha=0.7)
+    plt.title("Distribution of Learned Q-values vs Random Opponent", fontsize=14)
+    plt.xlabel("Q-value", fontsize=12)
+    plt.ylabel("Density", fontsize=12)
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.5)
     plt.tight_layout()
     plt.show()
 
@@ -319,7 +369,7 @@ def train_and_eval_against_random(steps=int(1e6),
     eval_games, wins_A = 0, 0
     game_lengths = []
     game_length = 0
-    for _ in range(steps):
+    for _ in range(steps//10):
 
         game_length += 1
 
@@ -351,6 +401,8 @@ def train_and_eval_against_random(steps=int(1e6),
     print(f"Agent {agent.name} win percentage against Random: {win_pct_A:.2f}% over {eval_games} non early terminated games.")
     print(f"Average length of non early terminated games: {np.mean(game_lengths) if game_lengths else 0:.2f} steps.")
     print(("======================================================================================================================\n"))
+
+    return q_values
 
 
 def train_and_eval_against_same(steps=int(1e6), 
@@ -417,21 +469,27 @@ def train_and_eval_against_same(steps=int(1e6),
     # Q-values histogram
     q_values = agent1.Q.flatten()
     q_values = q_values[np.abs(q_values) > 1e-5]
-    plt.figure(figsize=(8, 4))
-    plt.hist(q_values, bins=100, color='steelblue', density=True)
-    plt.title("Histogram of Learned Q-values against other Belief Learner (Agent A)")
-    plt.xlabel("Q-value")
-    plt.ylabel("Density")
+
+    plt.figure(figsize=(10, 5))
+    sns.histplot(q_values, bins=100, color='steelblue', stat='density', kde=False, edgecolor='black', alpha=0.7)
+    plt.title("Distribution of Learned Q-values vs other Belief Learner", fontsize=14)
+    plt.xlabel("Q-value", fontsize=12)
+    plt.ylabel("Density", fontsize=12)
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.5)
     plt.tight_layout()
     plt.show()
 
     q_values = agent2.Q.flatten()
     q_values = q_values[np.abs(q_values) > 1e-5]
-    plt.figure(figsize=(8, 4))
-    plt.hist(q_values, bins=100, color='steelblue', density=True)
-    plt.title("Histogram of Learned Q-values against other Belief Learner (Agent B)")
-    plt.xlabel("Q-value")
-    plt.ylabel("Density")
+
+    plt.figure(figsize=(10, 5))
+    sns.histplot(q_values, bins=100, color='steelblue', stat='density', kde=False, edgecolor='black', alpha=0.7)
+    plt.title("Distribution of Learned Q-values vs Belief Learner", fontsize=14)
+    plt.xlabel("Q-value", fontsize=12)
+    plt.ylabel("Density", fontsize=12)
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.5)
     plt.tight_layout()
     plt.show()
 
@@ -458,7 +516,7 @@ def train_and_eval_against_same(steps=int(1e6),
     eval_games, wins_A = 0, 0
     game_lengths = []
     game_length = 0
-    for _ in range(steps):
+    for _ in range(steps//10):
 
         game_length += 1
 
@@ -497,7 +555,7 @@ def train_and_eval_against_same(steps=int(1e6),
     eval_games, wins_A = 0, 0
     game_lengths = []
     game_length = 0
-    for _ in range(steps):
+    for _ in range(steps//10):
 
         game_length += 1
 
@@ -530,6 +588,8 @@ def train_and_eval_against_same(steps=int(1e6),
     print(f"Agent {agent1.name} win percentage against Random: {win_pct_A:.2f}% over {eval_games} non early terminated games.")
     print(f"Average length of non early terminated games: {np.mean(game_lengths) if game_lengths else 0:.2f} steps.")
     print(("======================================================================================================================\n"))
+
+    return q_values
 
 
 
@@ -585,10 +645,10 @@ def traing_against_random_eval_against_same(steps=int(1e6),
 
     # Evaluation against other belief learner
     s = env.reset()
-    eval_games, wins_A = 0, 0
+    eval_games, wins_A, wins_B = 0, 0, 0
     game_lengths = []
     game_length = 0
-    for _ in range(steps):
+    for _ in range(steps//10):
 
         game_length += 1
 
@@ -603,7 +663,7 @@ def traing_against_random_eval_against_same(steps=int(1e6),
 
         if log:
             plt.ion()
-            env.render(pause=0.5, wait_for_input=wait)
+            env.render(pause=0.5, wait_for_input=wait, score_a=wins_A, score_b=wins_B)
 
         if done:
             eval_games += 1
@@ -611,7 +671,10 @@ def traing_against_random_eval_against_same(steps=int(1e6),
             game_length = 0
             if rA > 0:
                 wins_A += 1
+            else: 
+                wins_B += 1
             s = env.reset()
+            env.render(pause=0.5, wait_for_input=wait, score_a=wins_A, score_b=wins_B)
         else:
             s = s2
 
@@ -628,9 +691,28 @@ def traing_against_random_eval_against_same(steps=int(1e6),
 
 if __name__ == '__main__':
 
-    train_and_eval_against_random(steps=int(1e6), exploring_starts=False, log=False, wait=False)
-    train_and_eval_against_same(steps=int(1e6), exploring_starts=False, log=False, wait=False)
-    traing_against_random_eval_against_same(steps=int(1e6), exploring_starts=False, log=False, wait=False)
+    ## q_random = train_and_eval_against_random(steps=int(1e6), exploring_starts=False, log=False, wait=False)
+    ## q_belief = train_and_eval_against_same(steps=int(1e6), exploring_starts=False, log=False, wait=False)
+
+    ## q_random_flat = np.array(q_random).flatten()
+    ## q_belief_flat = np.array(q_belief).flatten()
+
+
+    ## df = pd.DataFrame({
+    ##     'Q-value': np.concatenate([q_random_flat, q_belief_flat]),
+    ##     'Training Opponent': ['Random'] * len(q_random_flat) + ['Belief Learner'] * len(q_belief_flat)
+    ## })
+    ## plt.figure(figsize=(10, 5))
+    ## sns.histplot(data=df, x='Q-value', hue='Training Opponent', bins=100, stat='density',
+    ##             palette={'Random': 'blue', 'Belief Learner': 'red'}, alpha=0.5, element='step')
+
+    ## plt.title("Comparison of Q-value Distributions")
+    ## plt.xlabel("Q-value")
+    ## plt.ylabel("Density")
+    ## plt.tight_layout()
+    ## plt.show()
+
+    traing_against_random_eval_against_same(steps=int(1e6), exploring_starts=False, log=True, wait=False)
 
 
 
