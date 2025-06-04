@@ -1,0 +1,425 @@
+---
+title: "DTMC Simulation"
+output: html_notebook
+---
+
+
+```{r}
+# MLE simulation
+library(ggplot2)
+library(dplyr)
+
+set.seed(321)
+
+p_true  <- 0.3
+q_true  <- 0.2
+pi_true <- 0.8
+
+n      <- 25                
+N_vals <- c(50, 100, 300)    
+M      <- 500               
+
+simulate_batch <- function(N) {
+  p_est  <- numeric(M)
+  q_est  <- numeric(M)
+  pi_est <- numeric(M)
+  
+  for(m in seq_len(M)) {
+    N_AA <- N_AB <- N_BA <- N_BB <- 0
+    N0_A <- 0
+    
+    for(i in seq_len(N)) {
+      
+      s <- integer(n)
+      s[1] <- ifelse(runif(1) < pi_true, 1, 2)  
+      if(s[1] == 1) N0_A <- N0_A + 1
+      
+      for(t in seq_len(n-1)) {
+        if(s[t] == 1) {
+          s[t+1] <- ifelse(runif(1) < p_true, 2, 1)
+          if(s[t+1] == 1) N_AA <- N_AA + 1 else N_AB <- N_AB + 1
+        } else {
+          s[t+1] <- ifelse(runif(1) < q_true, 1, 2)
+          if(s[t+1] == 1) N_BA <- N_BA + 1 else N_BB <- N_BB + 1
+        }
+      }
+    }
+    
+    p_est[m]  <- N_AB / (N_AA + N_AB)
+    q_est[m]  <- N_BA / (N_BA + N_BB)
+    pi_est[m] <- N0_A / N
+  }
+  
+  data.frame(
+    N     = N,
+    p_hat = p_est,
+    q_hat = q_est,
+    pi_hat = pi_est
+  )
+}
+
+results <- bind_rows(lapply(N_vals, simulate_batch))
+
+sd_summary <- results %>%
+  group_by(N) %>%
+  summarise(
+    sd_p  = sd(p_hat),
+    sd_q  = sd(q_hat),
+    sd_pi = sd(pi_hat)
+  )
+print(sd_summary)
+
+ci_summary <- results %>%
+  group_by(N) %>%
+  summarise(
+    mean_p  = mean(p_hat),
+    sd_p    = sd(p_hat),
+    lower_p = mean_p - 1.96 * sd_p,
+    upper_p = mean_p + 1.96 * sd_p,
+    mean_q  = mean(q_hat),
+    sd_q    = sd(q_hat),
+    lower_q = mean_q - 1.96 * sd_q,
+    upper_q = mean_q + 1.96 * sd_q,
+    mean_pi  = mean(pi_hat),
+    sd_pi    = sd(pi_hat),
+    lower_pi = mean_pi - 1.96 * sd_pi,
+    upper_pi = mean_pi + 1.96 * sd_pi
+  )
+
+```
+
+
+
+```{r}
+# Plots
+library(grid) 
+library(ggpubr)
+library(grid)   
+
+p_p <- ggplot(results, aes(x = p_hat, color = factor(N), fill = factor(N))) +
+  geom_density(alpha = 0.3) +
+  geom_vline(xintercept = p_true, linetype = "dashed") +
+  geom_vline(
+    data = ci_summary,
+    aes(xintercept = lower_p, color = factor(N)),
+    linetype = "dashed"
+  ) +
+  geom_vline(
+    data = ci_summary,
+    aes(xintercept = upper_p, color = factor(N)),
+    linetype = "dashed"
+  ) +
+  labs(
+    title = expression("Sampling distribution of " * hat(p)),
+    x     = NULL,
+    y     = NULL,
+    color = "# Traces",
+    fill  = "# Traces"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position    = "none",                     
+    plot.title         = element_text(size = 18, face = "bold"),
+    plot.margin        = margin(t = 5, r = 15, b = 5, l = 5, unit = "pt")
+  )
+
+p_q <- ggplot(results, aes(x = q_hat, color = factor(N), fill = factor(N))) +
+  geom_density(alpha = 0.3) +
+  geom_vline(xintercept = q_true, linetype = "dashed") +
+  geom_vline(
+    data = ci_summary,
+    aes(xintercept = lower_q, color = factor(N)),
+    linetype = "dashed"
+  ) +
+  geom_vline(
+    data = ci_summary,
+    aes(xintercept = upper_q, color = factor(N)),
+    linetype = "dashed"
+  ) +
+  labs(
+    title = expression("Sampling distribution of " * hat(q)),
+    x     = NULL,
+    y     = NULL,
+    color = "# Traces",
+    fill  = "# Traces"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position    = "none",                    
+    plot.title         = element_text(size = 18, face = "bold"),
+    plot.margin        = margin(t = 5, r = 15, b = 5, l = 15, unit = "pt")
+  )
+
+p_pi <- ggplot(results, aes(x = pi_hat, color = factor(N), fill = factor(N))) +
+  geom_density(alpha = 0.3) +
+  geom_vline(xintercept = pi_true, linetype = "dashed") +
+  geom_vline(
+    data = ci_summary,
+    aes(xintercept = lower_pi, color = factor(N)),
+    linetype = "dashed"
+  ) +
+  geom_vline(
+    data = ci_summary,
+    aes(xintercept = upper_pi, color = factor(N)),
+    linetype = "dashed"
+  ) +
+  labs(
+    title = expression("Sampling distribution of " * hat(pi)[A]),
+    x     = NULL,
+    y     = NULL,
+    color = "# Traces",
+    fill  = "# Traces"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position   = "right",                    
+    legend.title      = element_text(size = 16),
+    legend.text       = element_text(size = 14),
+    legend.key.size   = unit(1, "cm"),
+    plot.title        = element_text(size = 18, face = "bold"),
+    plot.margin       = margin(t = 5, r = 5, b = 5, l = 15, unit = "pt")
+  )
+
+combined_plot <- ggarrange(
+  p_p, p_q, p_pi,
+  ncol          = 3,
+  nrow          = 1,
+  common.legend = TRUE,
+  legend        = "right"
+)
+
+# (3) Print the combined plot
+print(combined_plot)
+```
+
+
+
+```{r}
+# Bayesian part
+p_true  <- 0.3
+q_true  <- 0.2
+pi_true <- 0.8
+
+alpha_pi <- 2; beta_pi <- 2
+alpha_p  <- 2; beta_p  <- 2
+alpha_q  <- 2; beta_q  <- 2
+
+n      <- 25
+N_vals <- c(500, 1000, 3000)
+
+posterior_list <- lapply(N_vals, function(N) {
+  N_AA <- N_AB <- N_BA <- N_BB <- 0
+  N0_A <- 0
+
+  for(i in 1:N) {
+    s <- integer(n)
+    s[1] <- ifelse(runif(1) < pi_true, 1, 2)
+    if(s[1] == 1) N0_A <- N0_A + 1
+
+    for(t in 1:(n-1)) {
+      if(s[t] == 1) {
+        s[t+1] <- ifelse(runif(1) < p_true, 2, 1)
+        if(s[t+1] == 1) N_AA <- N_AA + 1 else N_AB <- N_AB + 1
+      } else {
+        s[t+1] <- ifelse(runif(1) < q_true, 1, 2)
+        if(s[t+1] == 1) N_BA <- N_BA + 1 else N_BB <- N_BB + 1
+      }
+    }
+  }
+
+  alpha_pi_post <- alpha_pi + N0_A
+  beta_pi_post  <- beta_pi  + (N - N0_A)
+  alpha_p_post  <- alpha_p  + N_AB
+  beta_p_post   <- beta_p   + N_AA
+  alpha_q_post  <- alpha_q  + N_BA
+  beta_q_post   <- beta_q   + N_BB
+
+  ci_pi <- qbeta(c(0.025, 0.975), alpha_pi_post, beta_pi_post)
+  ci_p  <- qbeta(c(0.025, 0.975), alpha_p_post,  beta_p_post)
+  ci_q  <- qbeta(c(0.025, 0.975), alpha_q_post,  beta_q_post)
+
+  list(
+    N = N,
+    post_params = data.frame(
+      param = c("pi_A", "p", "q"),
+      alpha = c(alpha_pi_post, alpha_p_post,  alpha_q_post),
+      beta  = c(beta_pi_post,  beta_p_post,   beta_q_post),
+      ci_lo = c(ci_pi[1],      ci_p[1],       ci_q[1]),
+      ci_hi = c(ci_pi[2],      ci_p[2],       ci_q[2]),
+      stringsAsFactors = FALSE
+    )
+  )
+})
+
+
+ci_data <- bind_rows(lapply(posterior_list, function(entry) {
+  df <- entry$post_params[, c("param", "ci_lo", "ci_hi")]
+  df$N <- factor(entry$N)
+  df
+}), .id = "dummy") %>%
+  select(N, param, ci_lo, ci_hi)
+
+x_grid <- seq(0, 1, length.out = 2000)
+
+all_post_df <- bind_rows(lapply(posterior_list, function(entry) {
+  df <- entry$post_params
+  df$N <- factor(entry$N)
+  df
+}), .id = "dummy") %>%
+  select(N, param, alpha, beta)
+
+plot_exact <- bind_rows(lapply(1:nrow(all_post_df), function(i) {
+  this_row <- all_post_df[i, ]
+  a <- this_row$alpha
+  b <- this_row$beta
+  data.frame(
+    N       = this_row$N,
+    param   = this_row$param,
+    x       = x_grid,
+    density = dbeta(x_grid, a, b),
+    stringsAsFactors = FALSE
+  )
+}))
+
+data_pi <- subset(plot_exact, param == "pi_A")
+data_p  <- subset(plot_exact, param == "p")
+data_q  <- subset(plot_exact, param == "q")
+
+cis_pi  <- subset(ci_data, param == "pi_A")
+lo_pi   <- min(cis_pi$ci_lo);   hi_pi <- max(cis_pi$ci_hi)
+rng_pi  <- hi_pi - lo_pi
+mgn_pi  <- 0.10 * rng_pi
+xlo_pi  <- max(0, lo_pi - mgn_pi)
+xhi_pi  <- min(1, hi_pi + mgn_pi)
+
+cis_p   <- subset(ci_data, param == "p")
+lo_p    <- min(cis_p$ci_lo);    hi_p  <- max(cis_p$ci_hi)
+rng_p   <- hi_p - lo_p
+mgn_p   <- 0.10 * rng_p
+xlo_p   <- max(0, lo_p - mgn_p)
+xhi_p   <- min(1, hi_p + mgn_p)
+
+cis_q   <- subset(ci_data, param == "q")
+lo_q    <- min(cis_q$ci_lo);    hi_q  <- max(cis_q$ci_hi)
+rng_q   <- hi_q - lo_q
+mgn_q   <- 0.10 * rng_q
+xlo_q   <- max(0, lo_q - mgn_q)
+xhi_q   <- min(1, hi_q + mgn_q)
+
+
+plot_pi_exact <- ggplot(data_pi, aes(x = x, y = density, fill = N)) +
+  geom_area(position = "identity", alpha = 0.2) + 
+  geom_line(aes(color = N), size = 1) +
+  geom_vline(
+    xintercept = pi_true, 
+    linetype   = "dashed", 
+    color      = "black"
+  ) +
+  geom_vline(
+    data = subset(ci_data, param == "pi_A"),
+    aes(xintercept = ci_lo, color = N),
+    linetype = "dashed"
+  ) +
+  geom_vline(
+    data = subset(ci_data, param == "pi_A"),
+    aes(xintercept = ci_hi, color = N),
+    linetype = "dashed"
+  ) +
+  labs(
+    title = expression("Posterior of " * pi[A]),
+    x     = NULL,
+    y     = NULL,
+    color = "# Traces",    
+    fill  = "# Traces"    
+  ) +
+  coord_cartesian(xlim = c(xlo_pi, xhi_pi)) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position  = "none", 
+    plot.title       = element_text(size = 18, face = "bold"),
+    plot.margin      = margin(t = 5, r = 15, b = 5, l = 5, unit = "pt")
+  )
+
+plot_p_exact <- ggplot(data_p, aes(x = x, y = density, fill = N)) +
+  geom_area(position = "identity", alpha = 0.2) +
+  geom_line(aes(color = N), size = 1) +
+  geom_vline(
+    xintercept = p_true, 
+    linetype   = "dashed", 
+    color      = "black"
+  ) +
+  geom_vline(
+    data = subset(ci_data, param == "p"),
+    aes(xintercept = ci_lo, color = N),
+    linetype = "dashed"
+  ) +
+  geom_vline(
+    data = subset(ci_data, param == "p"),
+    aes(xintercept = ci_hi, color = N),
+    linetype = "dashed"
+  ) +
+  labs(
+    title = expression("Posterior of " * p),
+    x     = NULL,
+    y     = NULL,
+    color = "# Traces",
+    fill  = "# Traces"
+  ) +
+  coord_cartesian(xlim = c(xlo_p, xhi_p)) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position  = "none",
+    plot.title       = element_text(size = 18, face = "bold"),
+    plot.margin      = margin(t = 5, r = 15, b = 5, l = 15, unit = "pt")
+  )
+
+plot_q_exact <- ggplot(data_q, aes(x = x, y = density, fill = N)) +
+  geom_area(position = "identity", alpha = 0.2) +
+  geom_line(aes(color = N), size = 1) +
+  geom_vline(
+    xintercept = q_true,
+    linetype   = "dashed",
+    color      = "black"
+  ) +
+  geom_vline(
+    data = subset(ci_data, param == "q"),
+    aes(xintercept = ci_lo, color = N),
+    linetype = "dashed"
+  ) +
+  geom_vline(
+    data = subset(ci_data, param == "q"),
+    aes(xintercept = ci_hi, color = N),
+    linetype = "dashed"
+  ) +
+  labs(
+    title = expression("Posterior of " * q),
+    x     = NULL,
+    y     = NULL,
+    color = "# Traces",
+    fill  = "# Traces"
+  ) +
+  coord_cartesian(xlim = c(xlo_q, xhi_q)) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position   = "right",
+    legend.title      = element_text(size = 16),
+    legend.text       = element_text(size = 14),
+    legend.key.size   = unit(1, "cm"),
+    plot.title        = element_text(size = 18, face = "bold"),
+    plot.margin       = margin(t = 5, r = 5, b = 5, l = 15, unit = "pt")
+  )
+
+
+combined_exact <- ggarrange(
+  plot_p_exact, plot_q_exact, plot_pi_exact,
+  ncol          = 3,
+  nrow          = 1,
+  common.legend = TRUE,
+  legend        = "right"
+)
+
+
+print(combined_exact)
+```
+
+
