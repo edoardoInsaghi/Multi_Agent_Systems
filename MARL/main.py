@@ -90,9 +90,10 @@ class SimpleFootball:
             dst_col = max(0, min(self.COLS - 1, dst_col))
             dst = (dst_row, dst_col)
 
-            # moving into other -> possession change, no move
+            # moving into other -> possession change if active player has the ball, no move
             if dst == other:
-                self.possession = 'B' if holder == 'A' else 'A'
+                if holder == self.possession:
+                    self.possession = 'B' if holder == 'A' else 'A'
             else:
                 if player == 'A':
                     self.pos_A = dst
@@ -101,47 +102,6 @@ class SimpleFootball:
 
         return self._encode_state(), 0, 0, False   
 
-
-    def render2(self, pause=0.5, wait_for_input=False):
-        self.ax.clear()
-        self.ax.set_xlim(-2, self.COLS + 2)
-        self.ax.set_ylim(-1, self.ROWS + 1)
-        self.ax.set_xticks([])
-        self.ax.set_yticks([])
-        self.ax.set_aspect('equal')
-        self.ax.invert_yaxis()
-
-        for row in range(-1, self.ROWS + 1):
-            for col in range(-2, self.COLS + 2):
-                if (row < 0 or row >= self.ROWS) or (col < 0 or col >= self.COLS):
-                    self.ax.add_patch(patches.Rectangle((col, row), 1, 1, facecolor='black'))
-
-        for row in range(self.ROWS):
-            for col in range(-1, self.COLS + 1):
-                if col < 0 or col >= self.COLS:
-                    if row in [1, 2]:
-                        self.ax.add_patch(patches.Rectangle((col, row), 1, 1, color='lightgreen', alpha=0.5, ec='black'))
-
-        for row in range(self.ROWS):
-            for col in range(self.COLS):
-                self.ax.add_patch(patches.Rectangle((col, row), 1, 1, edgecolor='black', facecolor='white'))
-                if (row, col) == self.pos_A:
-                    circle = patches.Circle((col + 0.5, row + 0.5), 0.3, color='blue')
-                    self.ax.add_patch(circle)
-                    label = 'A*' if self.possession == 'A' else 'A'
-                    self.ax.text(col + 0.5, row + 0.5, label, ha='center', va='center', fontsize=12, color='white')
-                elif (row, col) == self.pos_B:
-                    circle = patches.Circle((col + 0.5, row + 0.5), 0.3, color='red')
-                    self.ax.add_patch(circle)
-                    label = 'B*' if self.possession == 'B' else 'B'
-                    self.ax.text(col + 0.5, row + 0.5, label, ha='center', va='center', fontsize=12, color='white')
-
-        self.ax.set_title(f"Ball Possession: {self.possession}")
-        self.fig.canvas.draw()
-        plt.pause(pause)
-
-        if wait_for_input:
-            input("Press Enter for next move...")
 
     def render(self, pause=0.5, wait_for_input=False, score_a=None, score_b=None):
         self.ax.clear()
@@ -674,7 +634,6 @@ def traing_against_random_eval_against_same(steps=int(1e6),
             else: 
                 wins_B += 1
             s = env.reset()
-            env.render(pause=0.5, wait_for_input=wait, score_a=wins_A, score_b=wins_B)
         else:
             s = s2
 
@@ -712,7 +671,7 @@ if __name__ == '__main__':
     ## plt.tight_layout()
     ## plt.show()
 
-    traing_against_random_eval_against_same(steps=int(1e6), exploring_starts=False, log=True, wait=False)
+    traing_against_random_eval_against_same(steps=int(1e6), exploring_starts=False, log=False, wait=False)
 
 
 
